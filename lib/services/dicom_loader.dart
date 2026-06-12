@@ -15,21 +15,24 @@ class DicomStudyFile {
     required this.imageBytes,
   });
 
-  String? get modality => model.getModality();
-  String? get patientName => model.getPatientName();
-  String? get seriesDescription => model.getSeriesDescription();
   List<TagModel> get tags => model.flattenTags;
 
-  String? getTagValue(String description) {
-    final tag = tags.where(
-      (t) => t.tagDescription.toLowerCase() == description.toLowerCase(),
-    );
-    return tag.isNotEmpty ? tag.first.value : null;
+  /// Busca un tag DICOM por su código hexadecimal (ej: "0010,0010")
+  /// en la lista aplanada de tags (flattenTags).
+  String? _getTagByHex(String hex) {
+    final tag = tags.cast<TagModel?>().firstWhere(
+          (t) => t?.getTag() == hex,
+          orElse: () => null,
+        );
+    return tag?.value;
   }
 
-  String? get patientId => getTagValue('Patient ID');
-  String? get studyDescription => getTagValue('Study Description');
-  String? get studyDate => getTagValue('Study Date');
+  String? get modality => _getTagByHex('0008,0060') ?? model.getModality();
+  String? get patientName => _getTagByHex('0010,0010') ?? model.getPatientName();
+  String? get patientId => _getTagByHex('0010,0020');
+  String? get studyDescription => _getTagByHex('0008,1030');
+  String? get studyDate => _getTagByHex('0008,0020');
+  String? get seriesDescription => _getTagByHex('0008,103e') ?? model.getSeriesDescription();
 }
 
 class DicomLoader {

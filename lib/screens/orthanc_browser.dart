@@ -19,9 +19,17 @@ class OrthancBrowserState extends State<OrthancBrowser> {
   List<OrthancPatient> _patients = [];
   List<OrthancPatient> _filteredPatients = [];
   bool _isLoading = true;
+  bool _isLoadingStudies = false;
   String? _error;
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+
+  // Cache studies for date/accession search
+  Map<String, List<OrthancStudy>> _patientStudies = {};
+
+  // Date filter
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
 
   @override
   void initState() {
@@ -47,6 +55,8 @@ class OrthancBrowserState extends State<OrthancBrowser> {
         _filteredPatients = patients;
         _isLoading = false;
       });
+      // Pre-load studies in background for search
+      _loadAllStudies();
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -55,27 +65,140 @@ class OrthancBrowserState extends State<OrthancBrowser> {
     }
   }
 
-  void _onSearchChanged(String value) {
-    setState(() {
-      _searchQuery = value.toLowerCase();
-      if (_searchQuery.isEmpty) {
-        _filteredPatients = _patients;
-      } else {
-        _filteredPatients = _patients.where((p) {
-          final name = (p.name ?? '').toLowerCase();
-          final id = (p.patientId ?? '').toLowerCase();
-          return name.contains(_searchQuery) || id.contains(_searchQuery);
-        }).toList();
+  Future<void> _loadAllStudies() async {
+    setState(() => _isLoadingStudies = true);
+    try {
+      final studies = await widget.service.getStudiesForPatients(
+        _patients.map((p) => p.id).toList(),
+      );
+      if (mounted) {
+        setState(() {
+          _patientStudies = studies;
+          _isLoadingStudies = false;
+          // Re-apply current filter with new data
+          _applyFilter();
+        });
       }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingStudies = false);
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value.toLowerCase());
+    _applyFilter();
+  }
+
+  void _applyFilter() {
+    final query = _searchQuery;
+    final dateFrom = _dateFrom;
+    final dateTo = _dateTo;
+
+    if (query.isEmpty && dateFrom == null && dateTo == null) {
+      setState(() => _filteredPatients = _patients);
+      return;
+    }
+
+    setState(() {
+      _filteredPatients = _patients.where((p) {
+        final studies = _patientStudies[p.id] ?? [];
+
+        // Check date range match
+        bool matchesDate = true;
+        if (dateFrom != null || dateTo != null) {
+          matchesDate = studies.any((s) {
+            if (s.date == null || s.date!.length != 8) return false;
+            final y = int.tryParse(s.date!.substring(0, 4)) ?? 0;
+            final m = int.tryParse(s.date!.substring(4, 6)) ?? 0;
+            final d = int.tryParse(s.date!.substring(6, 8)) ?? 0;
+            final studyDate = DateTime(y, m, d);
+            if (dateFrom != null && studyDate.isBefore(dateFrom)) return false;
+            if (dateTo != null && studyDate.isAfter(dateTo)) return false;
+            return true;
+          });
+        }
+
+        // Check text match in name/ID or study data
+        bool matchesText = true;
+        if (query.isNotEmpty) {
+          final formattedName = _PatientTile.formatName(p.name).toLowerCase();
+          final rawName = (p.name ?? '').toLowerCase();
+          final nameMatch = rawName.contains(query) ||
+              formattedName.contains(query) ||
+              (p.patientId ?? '').toLowerCase().contains(query);
+
+          if (nameMatch) {
+            matchesText = true;
+          } else {
+            matchesText = studies.any((s) {
+              // Search by date (supports YYYYMMDD, YYYY-MM-DD, DD/MM/YYYY)
+              if (s.date != null && _normalizeDateQuery(s.date!).contains(query)) return true;
+              // Search by accession number
+              if (s.accessionNumber != null &&
+                  s.accessionNumber!.toLowerCase().contains(query)) return true;
+              // Search by description
+              if (s.description != null &&
+                  s.description!.toLowerCase().contains(query)) return true;
+              return false;
+            });
+          }
+        }
+
+        return matchesDate && matchesText;
+      }).toList();
     });
+  }
+
+  /// Normalize date YYYYMMDD to searchable formats
+  String _normalizeDateQuery(String dateStr) {
+    if (dateStr.length != 8) return dateStr.toLowerCase();
+    final y = dateStr.substring(0, 4);
+    final m = dateStr.substring(4, 6);
+    final d = dateStr.substring(6, 8);
+    return '$dateStr $y-$m-$d $d/$m/$y'.toLowerCase();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _dateFrom = null;
+      _dateTo = null;
+      _searchCtrl.clear();
+      _searchQuery = '';
+      _filteredPatients = _patients;
+    });
+  }
+
+  Future<void> _pickDateRange() async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      helpText: 'Filter by study date range',
+    );
+    if (range != null) {
+      setState(() {
+        _dateFrom = range.start;
+        _dateTo = range.end;
+      });
+      _applyFilter();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasActiveFilter = _dateFrom != null || _dateTo != null || _searchQuery.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.label ?? 'Orthanc'),
         actions: [
+          if (hasActiveFilter)
+            IconButton(
+              icon: const Icon(Icons.filter_alt_off),
+              tooltip: 'Clear filters',
+              onPressed: _clearFilters,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadPatients,
@@ -92,7 +215,7 @@ class OrthancBrowserState extends State<OrthancBrowser> {
                       const Icon(Icons.cloud_off, size: 64),
                       const SizedBox(height: 16),
                       Text('Connection error',
-                          style: Theme.of(context).textTheme.titleMedium),
+                          style: theme.textTheme.titleMedium),
                       const SizedBox(height: 8),
                       Text(_error!, style: const TextStyle(fontSize: 12)),
                       const SizedBox(height: 16),
@@ -108,12 +231,12 @@ class OrthancBrowserState extends State<OrthancBrowser> {
                   children: [
                     // Search bar
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                       child: TextField(
                         controller: _searchCtrl,
                         onChanged: _onSearchChanged,
                         decoration: InputDecoration(
-                          hintText: 'Search by name or ID...',
+                          hintText: 'Search by name, ID, date, accession...',
                           prefixIcon: const Icon(Icons.search, size: 20),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
@@ -130,26 +253,94 @@ class OrthancBrowserState extends State<OrthancBrowser> {
                         ),
                       ),
                     ),
-                    // Patient count
+                    // Date filter chips
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      child: Row(
+                        children: [
+                          _FilterChip(
+                            label: 'All dates',
+                            selected: _dateFrom == null,
+                            onSelected: () {
+                              setState(() {
+                                _dateFrom = null;
+                                _dateTo = null;
+                              });
+                              _applyFilter();
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          _FilterChip(
+                            label: 'Last 7d',
+                            selected: _dateFrom != null &&
+                                _dateFrom == DateTime.now().subtract(const Duration(days: 7)),
+                            onSelected: () {
+                              setState(() {
+                                _dateTo = DateTime.now();
+                                _dateFrom = DateTime.now().subtract(const Duration(days: 7));
+                              });
+                              _applyFilter();
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          _FilterChip(
+                            label: 'Last 30d',
+                            selected: _dateFrom != null &&
+                                _dateFrom == DateTime.now().subtract(const Duration(days: 30)),
+                            onSelected: () {
+                              setState(() {
+                                _dateTo = DateTime.now();
+                                _dateFrom = DateTime.now().subtract(const Duration(days: 30));
+                              });
+                              _applyFilter();
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          ActionChip(
+                            avatar: const Icon(Icons.date_range, size: 14),
+                            label: const Text('Range', style: TextStyle(fontSize: 11)),
+                            onPressed: _pickDateRange,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Info bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: Row(
                         children: [
                           Text(
                             '${_filteredPatients.length} patients',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.outline,
+                              fontSize: 11,
+                              color: theme.colorScheme.outline,
                             ),
                           ),
-                          if (_searchQuery.isNotEmpty)
+                          if (hasActiveFilter)
                             Text(
                               ' (filtered)',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.outline,
+                                fontSize: 11,
+                                color: theme.colorScheme.outline,
                               ),
                             ),
+                          if (_isLoadingStudies) ...[
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 12, height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5, color: theme.colorScheme.outline,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'loading studies...',
+                              style: TextStyle(
+                                fontSize: 10, color: theme.colorScheme.outline,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -161,11 +352,11 @@ class OrthancBrowserState extends State<OrthancBrowser> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(Icons.search_off, size: 48,
-                                      color: Theme.of(context).colorScheme.outlineVariant),
+                                      color: theme.colorScheme.outlineVariant),
                                   const SizedBox(height: 12),
                                   Text('No patients match your search',
                                       style: TextStyle(
-                                          color: Theme.of(context).colorScheme.outline)),
+                                          color: theme.colorScheme.outline)),
                                 ],
                               ),
                             )
@@ -177,6 +368,7 @@ class OrthancBrowserState extends State<OrthancBrowser> {
                                 itemBuilder: (_, i) => _PatientTile(
                                   patient: _filteredPatients[i],
                                   service: widget.service,
+                                  cachedStudies: _patientStudies[_filteredPatients[i].id],
                                 ),
                               ),
                             ),
@@ -187,19 +379,55 @@ class OrthancBrowserState extends State<OrthancBrowser> {
   }
 }
 
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      onPressed: onSelected,
+      color: selected
+          ? WidgetStatePropertyAll(Theme.of(context).colorScheme.primaryContainer)
+          : null,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
 class _PatientTile extends StatelessWidget {
   final OrthancPatient patient;
   final OrthancService service;
+  final List<OrthancStudy>? cachedStudies;
 
-  const _PatientTile({required this.patient, required this.service});
+  const _PatientTile({
+    required this.patient,
+    required this.service,
+    this.cachedStudies,
+  });
+
+  /// Format DICOM name: replace ^ with spaces
+  static String formatName(String? name) {
+    if (name == null || name.isEmpty) return '';
+    return name.replaceAll('^', ' ').trim();
+  }
 
   String _getInitials(String? name) {
     if (name == null || name.isEmpty) return '?';
-    final parts = name.trim().split(RegExp(r'\s+'));
+    final clean = formatName(name);
+    final parts = clean.split(RegExp(r'\s+'));
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
-    return name[0].toUpperCase();
+    return clean[0].toUpperCase();
   }
 
   @override
@@ -227,7 +455,7 @@ class _PatientTile extends StatelessWidget {
           ),
         ),
         title: Text(
-          hasName ? patient.name! : 'Unknown Patient',
+          hasName ? formatName(patient.name) : 'Unknown Patient',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
@@ -241,7 +469,11 @@ class _PatientTile extends StatelessWidget {
           style: const TextStyle(fontSize: 11),
         ),
         children: [
-          _StudyList(patientId: patient.id, service: service),
+          _StudyList(
+            patientId: patient.id,
+            service: service,
+            cachedStudies: cachedStudies,
+          ),
         ],
       ),
     );
@@ -251,8 +483,13 @@ class _PatientTile extends StatelessWidget {
 class _StudyList extends StatefulWidget {
   final String patientId;
   final OrthancService service;
+  final List<OrthancStudy>? cachedStudies;
 
-  const _StudyList({required this.patientId, required this.service});
+  const _StudyList({
+    required this.patientId,
+    required this.service,
+    this.cachedStudies,
+  });
 
   @override
   State<_StudyList> createState() => _StudyListState();
@@ -265,13 +502,16 @@ class _StudyListState extends State<_StudyList> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.cachedStudies != null) {
+      _studies = widget.cachedStudies;
+    } else {
+      _load();
+    }
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     final studies = await widget.service.getStudies(widget.patientId);
-    // Sort by date descending (newest first)
     studies.sort((a, b) {
       if (a.date == null && b.date == null) return 0;
       if (a.date == null) return 1;
@@ -299,7 +539,6 @@ class _StudyListState extends State<_StudyList> {
     }
     return Column(
       children: [
-        // Studies header
         Container(
           padding: const EdgeInsets.fromLTRB(48, 8, 16, 4),
           child: Row(

@@ -26,15 +26,22 @@ InteractiveViewer(
   ),
 )
 
-// Transparent overlay for WW/WL drag + double-tap reset (only in WL mode)
+// Transparent overlay for WW/WL drag (only in WL mode, NO onDoubleTap)
+// onDoubleTap is on the mode toggle button instead (see below)
 if (isWlMode)
   GestureDetector(
-    onDoubleTap: _onDoubleTap,  // reset WW/WL + flash HUD
     onPanStart: _onPanStart,    // show HUD
     onPanUpdate: _onPanUpdate,   // update values + HUD
     onPanEnd: _onPanEnd,         // hide HUD
     child: Container(color: Colors.transparent),
   )
+
+// Mode toggle button (also handles double-tap reset)
+InkWell(
+  onTap: _toggleMode,
+  onDoubleTap: _onDoubleTap,  // ⬅️ double-tap on the button to reset WW/WL
+  ...
+)
 ```
 
 ### 👆 Double-Tap to Reset
@@ -48,8 +55,7 @@ void _onDoubleTap() {
 }
 ```
 
-**⚠️ Note:** Combining `onDoubleTap` with `onPan*` in the same `GestureDetector` causes a ~300ms delay before the pan gesture starts (Flutter's gesture arena waits for a potential second tap).
-```
+**✅ Key decision:** `onDoubleTap` is on the **mode toggle button** (`InkWell`), NOT on the `GestureDetector`. This avoids the ~300ms gesture arena delay that occurs when combining `onDoubleTap` with `onPan*` in the same detector. The `GestureDetector` only has `onPan*` callbacks → **zero delay** on drag start.
 
 ### 📊 WW/WL Drag HUD (Heads-Up Display)
 A floating overlay shows real-time WW (contrast) and WL (brightness) values while dragging. Appears with fade animation:

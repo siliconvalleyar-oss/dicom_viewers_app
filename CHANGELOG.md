@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.8] - 2026-06-12
+
+### Added
+- 🔍 **Búsqueda por fecha** — chips "Last 7d", "Last 30d", date range picker
+- 🔍 **Búsqueda por accession** y descripción de estudio
+- 🔍 **Búsqueda por apellido** — nombres DICOM con `^` (ej: "AMARFIL^RAUL") ahora se muestran y buscan correctamente
+- 📅 **Date filter chips** con lógica AND combinada con búsqueda de texto
+
+### Changed
+- Versión actualizada a `1.0.8`
+- OrthancBrowser: cache de estudios precargados para búsqueda rápida
+- Formato de nombre DICOM: `^` reemplazado por espacios visualmente
+
+---
+
+## [1.0.7] - 2026-06-12
+
+### Fixed
+- 👆 **Doble tap movido al botón de modo toggle** — elimina la demora de ~300ms en el arrastre WW/WL que ocurría al combinar `onDoubleTap` + `onPan*` en el mismo `GestureDetector`
+- El `GestureDetector` ahora solo tiene callbacks `onPan*` → arrastre **instantáneo**
+
+### Changed
+- Versión actualizada a `1.0.7`
+- Skills actualizados con la nueva estrategia de gestos
+
+---
+
 ## [1.0.6] - 2026-06-12
 
 ### Added

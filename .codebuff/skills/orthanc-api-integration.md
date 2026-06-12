@@ -97,3 +97,27 @@ studies.sort((a, b) {
 ```
 
 Date format: YYYYMMDD (string comparison works for sorting)
+
+## Búsqueda Avanzada
+
+### Text Search (nombre, ID, fecha, accession)
+- Busca en: nombre raw ("AMARFIL^RAUL"), nombre formateado ("AMARFIL RAUL"), ID, fecha de estudio, accession number, descripción
+- Fechas: soporta YYYYMMDD, YYYY-MM-DD, DD/MM/YYYY via `_normalizeDateQuery()`
+
+### Date Filter Chips
+- "All dates", "Last 7d", "Last 30d", "Range" (date range picker)
+- Lógica AND: fecha + texto se combinan
+
+### Pre-carga de estudios
+- `OrthancService.getStudiesForPatients()` carga estudios de múltiples pacientes
+- Cache en `OrthancBrowserState._patientStudies`
+- Reusado por `_StudyList` para evitar re-fetching
+
+### Formato de Nombre DICOM
+```dart
+static String formatName(String? name) {
+  if (name == null || name.isEmpty) return '';
+  return name.replaceAll('^', ' ').trim();  // "AMARFIL^RAUL" → "AMARFIL RAUL"
+}
+```
+- Busca en ambos formatos (raw con ^ y formateado con espacios)

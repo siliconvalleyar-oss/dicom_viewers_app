@@ -376,6 +376,32 @@ class OrthancService {
     return studies;
   }
 
+  /// Pre-load studies for multiple patients at once. Returns map patientId -> studies.
+  Future<Map<String, List<OrthancStudy>>> getStudiesForPatients(
+    List<String> patientIds,
+  ) async {
+    final result = <String, List<OrthancStudy>>{};
+    for (final pid in patientIds) {
+      final detail = await _getJson('/patients/$pid');
+      if (detail == null) {
+        result[pid] = [];
+        continue;
+      }
+      final studyIds = List<String>.from(detail['Studies'] ?? []);
+      final studies = <OrthancStudy>[];
+      for (final sid in studyIds) {
+        final studyData = await _getJson('/studies/$sid');
+        if (studyData != null) {
+          studies.add(OrthancStudy.fromJson(sid, studyData));
+        }
+      }
+      result[pid] = studies;
+    }
+    return result;
+  }
+
+
+
   Future<List<OrthancSeries>> getSeries(String studyId) async {
     final detail = await _getJson('/studies/$studyId');
     if (detail == null) return [];

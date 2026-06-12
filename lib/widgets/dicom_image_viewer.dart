@@ -121,7 +121,6 @@ class _DicomImageViewerState extends State<DicomImageViewer> {
               // Transparent overlay for WW/WL drag (only in WL mode)
               if (isWlMode)
                 GestureDetector(
-                  onDoubleTap: _onDoubleTap,
                   onPanStart: _onPanStart,
                   onPanUpdate: _onPanUpdate,
                   onPanEnd: _onPanEnd,
@@ -159,6 +158,7 @@ class _DicomImageViewerState extends State<DicomImageViewer> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
                     onTap: _toggleMode,
+                    onDoubleTap: _onDoubleTap,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),

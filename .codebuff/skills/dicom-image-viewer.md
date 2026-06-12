@@ -26,14 +26,29 @@ InteractiveViewer(
   ),
 )
 
-// Transparent overlay for WW/WL drag (only in WL mode)
+// Transparent overlay for WW/WL drag + double-tap reset (only in WL mode)
 if (isWlMode)
   GestureDetector(
-    onPanStart: _onPanStart,  // show HUD
-    onPanUpdate: _onPanUpdate, // update values + HUD
-    onPanEnd: _onPanEnd,       // hide HUD
+    onDoubleTap: _onDoubleTap,  // reset WW/WL + flash HUD
+    onPanStart: _onPanStart,    // show HUD
+    onPanUpdate: _onPanUpdate,   // update values + HUD
+    onPanEnd: _onPanEnd,         // hide HUD
     child: Container(color: Colors.transparent),
   )
+```
+
+### 👆 Double-Tap to Reset
+```dart
+void _onDoubleTap() {
+  resetWindowLevel();
+  setState(() => _showDragHud = true);  // flash HUD as confirmation
+  Future.delayed(const Duration(milliseconds: 600), () {
+    if (mounted) setState(() => _showDragHud = false);
+  });
+}
+```
+
+**⚠️ Note:** Combining `onDoubleTap` with `onPan*` in the same `GestureDetector` causes a ~300ms delay before the pan gesture starts (Flutter's gesture arena waits for a potential second tap).
 ```
 
 ### 📊 WW/WL Drag HUD (Heads-Up Display)

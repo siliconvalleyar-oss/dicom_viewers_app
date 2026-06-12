@@ -21,12 +21,15 @@ void _toggleMode() => setState(() {
 
 ### In WW/WL Mode:
 - `InteractiveViewer(panEnabled: false)` — disables pan but keeps pinch zoom
-- Transparent `GestureDetector` overlay with **3 callbacks**:
+- Transparent `GestureDetector` overlay with **4 callbacks**:
+  - `onDoubleTap` → reset WW/WL + flash HUD for 600ms confirmation
   - `onPanStart` → show floating HUD with current WW/WL values
   - `onPanUpdate` → update values (dy=WL/brightness, dx=WW/contrast) + HUD
   - `onPanEnd` → hide HUD
 - HUD uses `AnimatedOpacity` for smooth 200ms fade in/out
 - Pinch zoom still works via InteractiveViewer
+
+**⚠️ Trade-off:** Adding `onDoubleTap` alongside `onPan*` introduces ~300ms delay before the pan gesture starts (Flutter's gesture arena waits for potential second tap).
 
 ### In Zoom Mode:
 - `InteractiveViewer(panEnabled: true)` — full pan and zoom

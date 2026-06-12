@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.6] - 2026-06-12
+
+### Added
+- 👆 **Doble tap** para reset rápido de WW/WL sobre la imagen
+- 💡 **Confirmación visual** — HUD aparece brevemente (600ms) mostrando los valores reseteados
+
+### Changed
+- Versión actualizada a `1.0.6`
+- README profesional con tablas de gestos, estructura del proyecto e historial de versiones
+
+---
+
 ## [1.0.5] - 2026-06-12
 
 ### Added

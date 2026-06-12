@@ -47,7 +47,7 @@ class OrthancPatient {
   });
 
   factory OrthancPatient.fromJson(String id, Map<String, dynamic> json) {
-    final tags = json['PatientMainDicomTags'] as Map<String, dynamic>?;
+    final tags = json['MainDicomTags'] as Map<String, dynamic>?;
     return OrthancPatient(
       id: id,
       name: tags?['PatientName']?.toString(),

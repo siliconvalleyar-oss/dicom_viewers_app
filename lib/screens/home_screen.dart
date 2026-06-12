@@ -215,7 +215,10 @@ class _StudyGrid extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ViewerScreen(studyFile: study),
+                  builder: (_) => ViewerScreen(
+                    studies: studies,
+                    initialIndex: index,
+                  ),
                 ),
               );
             },
